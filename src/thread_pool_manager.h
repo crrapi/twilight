@@ -1,41 +1,39 @@
 #ifndef THREAD_POOL_MANAGER_H
 #define THREAD_POOL_MANAGER_H
 
-#include <vector>
+#include <condition_variable>
+#include <functional>
+#include <future>
+#include <mutex>
 #include <queue>
 #include <thread>
-#include <mutex>
-#include <functional>
-#include <condition_variable>
-#include <atomic>
+#include <vector>
 
 class ThreadPoolManager
 {
 public:
-    ThreadPoolManager(size_t thread_count);
+    ThreadPoolManager(size_t initialThreads, size_t maxThreads);
     ~ThreadPoolManager();
-    void enqueueTask(std::function<void()> task, int priority = 0);
+
+    void enqueueTask(std::function<void()> task);
     void shutdown();
 
 private:
-    void workerThread();
+    // New method to scale threads dynamically
+    void adjustThreadPoolSize();
 
-    struct Task
-    {
-        std::function<void()> func;
-        int priority;
+    // Worker function for threads
+    void worker();
 
-        bool operator<(const Task &other) const
-        {
-            return priority < other.priority;
-        }
-    };
+    std::vector<std::thread> threads;
+    std::queue<std::function<void()>> tasks;
+    std::mutex queueMutex;
+    std::condition_variable condition;
+    bool stop = false;
 
-    std::vector<std::thread> workers_;
-    std::priority_queue<Task> tasks_;
-    std::mutex queue_mutex_;
-    std::condition_variable condition_;
-    std::atomic<bool> stop_;
+    size_t maxThreads;
+    std::atomic<size_t> currentThreads;
+    std::atomic<size_t> activeThreads;
 };
 
 #endif // THREAD_POOL_MANAGER_H

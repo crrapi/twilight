@@ -4,7 +4,7 @@
 
 TEST(ThreadPoolManagerTest, EnqueueTask)
 {
-    ThreadPoolManager manager(2);
+    ThreadPoolManager manager(2, 5);
     manager.enqueueTask([]() { /* task code */ });
     manager.shutdown();
 }

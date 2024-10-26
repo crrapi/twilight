@@ -1,12 +1,23 @@
 #include "thread_pool_manager.h"
-#include "utils/logging.h"
+#include <chrono>
 
-ThreadPoolManager::ThreadPoolManager(size_t thread_count) : stop_(false)
+ThreadPoolManager::ThreadPoolManager(size_t initialThreads, size_t maxThreads)
+    : maxThreads(maxThreads), currentThreads(initialThreads), activeThreads(0)
 {
-    for (size_t i = 0; i < thread_count; ++i)
+
+    for (size_t i = 0; i < initialThreads; ++i)
     {
-        workers_.emplace_back(&ThreadPoolManager::workerThread, this);
+        threads.emplace_back(&ThreadPoolManager::worker, this);
     }
+
+    // Start a background thread to adjust the pool size
+    std::thread([this]()
+                {
+        while (!stop) {
+            adjustThreadPoolSize();
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        } })
+        .detach();
 }
 
 ThreadPoolManager::~ThreadPoolManager()
@@ -14,40 +25,81 @@ ThreadPoolManager::~ThreadPoolManager()
     shutdown();
 }
 
-void ThreadPoolManager::enqueueTask(std::function<void()> task, int priority)
+void ThreadPoolManager::enqueueTask(std::function<void()> task)
 {
     {
-        std::unique_lock<std::mutex> lock(queue_mutex_);
-        tasks_.push({task, priority});
+        std::unique_lock<std::mutex> lock(queueMutex);
+        tasks.emplace(std::move(task));
     }
-    condition_.notify_one();
+    condition.notify_one();
+}
+
+void ThreadPoolManager::worker()
+{
+    while (true)
+    {
+        std::function<void()> task;
+        {
+            std::unique_lock<std::mutex> lock(queueMutex);
+            condition.wait(lock, [this]()
+                           { return stop || !tasks.empty(); });
+            if (stop && tasks.empty())
+                return;
+
+            task = std::move(tasks.front());
+            tasks.pop();
+            ++activeThreads;
+        }
+
+        task();
+
+        {
+            std::unique_lock<std::mutex> lock(queueMutex);
+            --activeThreads;
+        }
+    }
 }
 
 void ThreadPoolManager::shutdown()
 {
-    stop_ = true;
-    condition_.notify_all();
-    for (std::thread &worker : workers_)
     {
-        if (worker.joinable())
-            worker.join();
+        std::unique_lock<std::mutex> lock(queueMutex);
+        stop = true;
+    }
+    condition.notify_all();
+    for (std::thread &thread : threads)
+    {
+        if (thread.joinable())
+            thread.join();
     }
 }
 
-void ThreadPoolManager::workerThread()
+// Dynamic adjustment function
+void ThreadPoolManager::adjustThreadPoolSize()
 {
-    while (true)
+    size_t taskCount;
     {
-        Task task;
+        std::lock_guard<std::mutex> lock(queueMutex);
+        taskCount = tasks.size();
+    }
+
+    if (taskCount > threads.size() && currentThreads < maxThreads)
+    {
+        // Scale up by adding a new thread
+        threads.emplace_back(&ThreadPoolManager::worker, this);
+        ++currentThreads;
+    }
+    else if (taskCount < threads.size() / 2 && currentThreads > 1)
+    {
+        // Scale down by stopping one thread
         {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
-            condition_.wait(lock, [this]()
-                            { return stop_ || !tasks_.empty(); });
-            if (stop_ && tasks_.empty())
-                return;
-            task = tasks_.top();
-            tasks_.pop();
+            std::unique_lock<std::mutex> lock(queueMutex);
+            stop = true;
         }
-        task.func();
+        condition.notify_all();
+        threads.back().join();
+        threads.pop_back();
+        --currentThreads;
+        stop = false;
     }
 }

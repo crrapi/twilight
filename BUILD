@@ -1,8 +1,12 @@
-cc_library(
-    name = "thread_pool",
-    srcs = ["src/thread_pool.cpp"],
-    hdrs = ["include/twilight/thread_pool.h"],
-    copts = ["-std=c++11"],
-    includes = ["include"],
-    visibility = ["//visibility:public"],
+# BUILD
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "thread_pool_manager",
+    srcs = ["src/main.cpp"],
+    deps = [
+        "//src:task_executor",
+        "//src:thread_pool_manager",
+        "//src/utils:logging",
+    ],
 )

@@ -69,13 +69,13 @@ bazel test //tests:all
 
 ## Usage
 
-The main entry point initializes the `ThreadPoolManager` with a specific number of threads and enqueues tasks for execution. Here’s a basic usage example in `main.cpp`:
+The main entry point initializes the `ThreadPoolManager` with a specific number of threads and enqueues tasks for execution. Here’s a basic usage example:
 
 ```cpp
 #include "thread_pool_manager.h"
 
 int main() {
-    ThreadPoolManager manager(4); // Initialize with 4 threads
+    ThreadPoolManager manager(4, 8); // Initialize with 4 threads, can scale up to 8
     manager.enqueueTask([]() { std::cout << "Task 1 running.\n"; });
     manager.enqueueTask([]() { std::cout << "Task 2 running.\n"; });
     

@@ -1,4 +1,3 @@
-// src/thread_pool_manager.h
 #ifndef THREAD_POOL_MANAGER_H
 #define THREAD_POOL_MANAGER_H
 
@@ -15,15 +14,25 @@ class ThreadPoolManager
 public:
     ThreadPoolManager(size_t thread_count);
     ~ThreadPoolManager();
-
-    void enqueueTask(std::function<void()> task);
+    void enqueueTask(std::function<void()> task, int priority = 0);
     void shutdown();
 
 private:
     void workerThread();
 
+    struct Task
+    {
+        std::function<void()> func;
+        int priority;
+
+        bool operator<(const Task &other) const
+        {
+            return priority < other.priority;
+        }
+    };
+
     std::vector<std::thread> workers_;
-    std::queue<std::function<void()>> tasks_;
+    std::priority_queue<Task> tasks_;
     std::mutex queue_mutex_;
     std::condition_variable condition_;
     std::atomic<bool> stop_;

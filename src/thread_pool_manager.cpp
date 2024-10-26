@@ -1,4 +1,3 @@
-// src/thread_pool_manager.cpp
 #include "thread_pool_manager.h"
 #include "utils/logging.h"
 
@@ -15,11 +14,11 @@ ThreadPoolManager::~ThreadPoolManager()
     shutdown();
 }
 
-void ThreadPoolManager::enqueueTask(std::function<void()> task)
+void ThreadPoolManager::enqueueTask(std::function<void()> task, int priority)
 {
     {
         std::unique_lock<std::mutex> lock(queue_mutex_);
-        tasks_.push(task);
+        tasks_.push({task, priority});
     }
     condition_.notify_one();
 }
@@ -39,16 +38,16 @@ void ThreadPoolManager::workerThread()
 {
     while (true)
     {
-        std::function<void()> task;
+        Task task;
         {
             std::unique_lock<std::mutex> lock(queue_mutex_);
             condition_.wait(lock, [this]()
                             { return stop_ || !tasks_.empty(); });
             if (stop_ && tasks_.empty())
                 return;
-            task = tasks_.front();
+            task = tasks_.top();
             tasks_.pop();
         }
-        task();
+        task.func();
     }
 }
